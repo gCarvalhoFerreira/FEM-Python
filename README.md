@@ -1,5 +1,5 @@
 # FEM-Python
-A Finite Element Strucutural analysis tool open for all. Uma ferramenta de Analise Estrutural de Elemento Finito.
+A Finite Element Strucutural analysis tool open for all. Uma ferramenta de Analise Estrutural de Elemento Finito aberto à todos.
 
 To use this code, just copy and paste into your python IDE and run. The text file with the structural information must be in the same directory, else change the address in variable 'BBB'.
 

@@ -1,0 +1,721 @@
+#     A Finite Element for Dynamical e Static Structural Analysis
+#     Copyright (C) 2023  Gabriel de Carvalho Ferreira
+
+#     This program is free software: you can redistribute it and/or modify
+#     it under the terms of the GNU General Public License as published by
+#     the Free Software Foundation, either version 3 of the License, or
+#     (at your option) any later version.
+
+#     This program is distributed in the hope that it will be useful,
+#     but WITHOUT ANY WARRANTY; without even the implied warranty of
+#     MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#     GNU General Public License for more details.
+
+#     You should have received a copy of the GNU General Public License
+#     along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+
+from numpy import array,identity,zeros,concatenate,append,sin,diagflat
+from numpy import size as Size
+from numpy import sqrt as Raiz
+from matplotlib.pyplot import subplots
+from numpy.linalg import inv,eig
+
+        # Funcoes basicas atualizadas
+
+def DN(MN,ME,i,a):
+	return (MN[(ME[i][1]-1)][a] - MN[(ME[i][0]-1)][a])
+
+def DIR2D(x,y):
+	return (1/((x*x+y*y)**0.5))*array([x,y,(x*x+y*y)])
+
+def DIR3D(x,y,z):
+    return (1/((x*x+y*y+z*z)**0.5))*array([x,y,z,(x*x+y*y+z*z)])
+
+def RM(A,B):
+    return ((A.T @ B) @ A)
+
+def RMrot(A,B):
+    return (B @ A)
+
+def RV(A,B):
+    return (A.T @ B)
+
+def EM(A,B):
+    return (A @ B)
+
+def CC(MCC,N,tipo,GL): #tipo=0 quando for matriz de contorno,e tipo=1 a negada.
+    if (tipo):
+        return diagflat((MCC-1)*-1)
+    else:
+        return diagflat(MCC)
+
+        # Matrizes
+
+#_K_#
+
+#_Versao 2D
+def K2D(A,I,E,L):
+    B=I/(L*L)
+    return (E/L)*array([[A,0,0,-A,0,0],
+                        [0,12*B,6*L*B,0,-12*B,6*L*B],
+                        [0,6*L*B,4*L*L*B,0,-6*L*B,2*L*L*B],
+                        [-A,0,0,A,0,0],
+                        [0,-12*B,-6*L*B,0,12*B,-6*L*B],
+                        [0,6*L*B,2*L*L*B,0,-6*L*B,4*L*L*B]])
+
+#_Versao 3D
+
+def K3D(A,J,Iy,Iz,E,G,L):
+    By= (Iz/(L*L))
+    Bz= (Iy/(L*L))
+    Alfa= (G*J/E)
+    return (E/L)*array([[A,0,0,0,0,0,-A,0,0,0,0,0],
+                        [0,12*By,0,0,0,6*L*By,0,-12*By,0,0,0,6*L*By],
+                        [0,0,12*Bz,0,-6*L*Bz,0,0,0,-12*Bz,0,-6*L*Bz,0],
+                        [0,0,0,Alfa,0,0,0,0,0,-Alfa,0,0],
+                        [0,0,-6*L*Bz,0,4*L*L*Bz,0,0,0,6*L*Bz,0,2*L*L*Bz,0],
+                        [0,6*L*By,0,0,0,4*L*L*By,0,-6*L*By,0,0,0,2*L*L*By],
+                        [-A,0,0,0,0,0,A,0,0,0,0,0],
+                        [0,-12*By,0,0,0,-6*L*By,0,12*By,0,0,0,-6*L*By],
+                        [0,0,-12*Bz,0,6*L*Bz,0,0,0,12*Bz,0,6*L*Bz,0],
+                        [0,0,0,-Alfa,0,0,0,0,0,Alfa,0,0],
+                        [0,0,-6*L*Bz,0,2*L*L*Bz,0,0,0,6*L*Bz,0,4*L*L*Bz,0],
+                        [0,6*L*By,0,0,0,2*L*L*By,0,-6*L*By,0,0,0,4*L*L*By]])
+
+#_Rotacoes_#
+
+#_Versao 2D
+def R2D(v):
+	return array([[v[0],v[1],0,0,0,0],
+               [-v[1],v[0],0,0,0,0],
+               [0,0,1,0,0,0],
+               [0,0,0,v[0],v[1],0],
+               [0,0,0,-v[1],v[0],0],
+               [0,0,0,0,0,1]])
+
+#_Versao 3D
+
+def R3D(V):   
+    l = Raiz(V[0]*V[0] + V[2]*V[2])
+    if (l == 0):
+        p = DIR3D(V[0]+1.1,V[1],V[2])
+        b = 1/Raiz(p[0]*p[0] + p[2]*p[2])
+        cos,sin = (-p[0]*V[1]*b),(p[2]*b)
+        return array([[0,V[1],0,0,0,0,0,0,0,0,0,0],
+                    [-V[1]*cos,0,sin,0,0,0,0,0,0,0,0,0],
+                    [V[1]*sin,0,cos,0,0,0,0,0,0,0,0,0],
+                    [0,0,0,0,V[1],0,0,0,0,0,0,0],
+                    [0,0,0,-V[1]*cos,0,sin,0,0,0,0,0,0],
+                    [0,0,0,V[1]*sin,0,cos,0,0,0,0,0,0],
+                    [0,0,0,0,0,0,0,V[1],0,0,0,0],
+                    [0,0,0,0,0,0,-V[1]*cos,0,sin,0,0,0],
+                    [0,0,0,0,0,0,V[1]*sin,0,cos,0,0,0],
+                    [0,0,0,0,0,0,0,0,0,0,V[1],0],
+                    [0,0,0,0,0,0,0,0,0,-V[1]*cos,0,sin],
+                    [0,0,0,0,0,0,0,0,0,V[1]*sin,0,cos]])
+    
+    p,g = DIR3D(V[0],V[1]+1.1,V[2]),(1/l)
+    p2 = array([
+        (V[0]*p[0] + V[1]*p[1] + V[2]*p[2]),
+        (l*p[1]-(V[0]*V[1]*p[0] + V[1]*V[2]*p[2])*g),
+        ((V[0]*p[2] - V[2]*p[0])*g)])
+    
+    b = (1/Raiz(p2[1]*p2[1] + p2[2]*p2[2]))
+    cos,sin = (p2[1]*b), (p2[2]*b)
+    c1 = -(V[0]*V[1]*cos + V[2]*sin)*g
+    c2 = cos*l
+    c3 = (V[0]*sin - V[1]*V[2]*cos)*g
+    c4 = (V[0]*V[1]*sin - V[2]*cos)*g
+    c5 = -sin*l
+    c6 = (V[0]*cos + V[1]*V[2]*sin)*g
+    return array([[V[0],V[1],V[2],0,0,0,0,0,0,0,0,0],
+                [c1,c2,c3,0,0,0,0,0,0,0,0,0],
+                [c4,c5,c6,0,0,0,0,0,0,0,0,0],
+                [0,0,0,V[0],V[1],V[2],0,0,0,0,0,0],
+                [0,0,0,c1,c2,c3,0,0,0,0,0,0],
+                [0,0,0,c4,c5,c6,0,0,0,0,0,0],
+                [0,0,0,0,0,0,V[0],V[1],V[2],0,0,0],
+                [0,0,0,0,0,0,c1,c2,c3,0,0,0],
+                [0,0,0,0,0,0,c4,c5,c6,0,0,0],
+                [0,0,0,0,0,0,0,0,0,V[0],V[1],V[2]],
+                [0,0,0,0,0,0,0,0,0,c1,c2,c3],
+                [0,0,0,0,0,0,0,0,0,c4,c5,c6]])
+
+#_M_#
+
+#_Versao 2D
+def M2D(A,L,r):
+	return (r*L*A/420)*array([[140,0,0,70,0,0],
+                           [0,156,22*L,0,54,-13*L],
+                           [0,22*L,4*L*L,0,13*L,-3*L*L],
+                           [70,0,0,140,0,0],
+                           [0,54,13*L,0,156,-22*L],
+                           [0,-13*L,-3*L*L,0,-22*L,4*L*L]])
+
+#_Vesao 3D
+
+def M3D(A,J,L,r):
+ 	a1 = 1/A
+ 	return (r*L*A/420)*array([[140,0,0,0,0,0,70,0,0,0,0,0],
+                            [0,156,0,0,0,22*L,0,54,0,0,0,-13*L],
+                            [0,0,156,0,-22*L,0,0,0,54,0,13*L,0],
+                            [0,0,0,140*a1*J,0,0,0,0,0,70*J*a1,0,0],
+                            [0,0,-22*L,0,4*L*L,0,0,0,-13*L,0,-3*L*L,0],
+                            [0,22*L,0,0,0,4*L*L,0,13*L,0,0,0,-3*L*L],
+                            [70,0,0,0,0,0,140,0,0,0,0,0],
+                            [0,54,0,0,0,13*L,0,156,0,0,0,-22*L],
+                            [0,0,54,0,-13*L,0,0,0,156,0,22*L,0],
+                            [0,0,0,70*J*a1,0,0,0,0,0,140*J*a1,0,0],
+                            [0,0,13*L,0,-3*L*L,0,0,0,22*L,0,4*L*L,0],
+                            [0,-13*L,0,0,0,-3*L*L,0,-22*L,0,0,0,4*L*L]])
+
+#_F_#
+
+#_Versao 2D Estatica
+def CT2D(Q,L):
+	a = L*0.05
+	b = L/6
+	return array([ (2*b*Q[0]+b*Q[2]),
+               (7*a*Q[1]+3*a*Q[3]),
+               (L*a*Q[1]+L*L*Q[3]/30), 
+               (2*b*Q[2]+b*Q[0]),
+               (7*a*Q[3]+3*a*Q[1]),
+               (-L*a*Q[3]-L*L*Q[1]/30)])
+
+#_Versao 3D Estatica
+def CT3D(Q,L):
+    a = L*0.05
+    b = L/6
+    return array([ (2*b*Q[0]+b*Q[3]), 
+                  (7*a*Q[1]+3*a*Q[4]), 
+                  (7*a*Q[2]+3*a*Q[5]), 
+                  (0),
+                  (L*a*Q[2]+L*L*Q[5]/30), 
+                  (L*a*Q[1]+L*L*Q[4]/30), 
+                  (2*b*Q[3]+b*Q[0]), 
+                  (7*a*Q[4]+3*a*Q[1]), 
+                  (7*a*Q[5]+3*a*Q[2]), 
+                  (0), 
+                  (-L*a*Q[5]-L*L*Q[2]/30), 
+                  (-L*a*Q[4]-L*L*Q[1]/30)])
+
+#_Versao 2D Dinamica
+def CT2DD(Q,L,r,A):
+    a = L*0.05
+    b = (L/6)
+    # peso_proprio = array([0,-0.5*c,-b*c*0.5,0,-0.5*c,0.5*b*c])*r*A*L
+    return array([ (2*b*Q[0]+b*Q[2]),
+                  (7*a*Q[1]+3*a*Q[3]),
+                  (L*a*Q[1]+L*L*Q[3]/30),
+                  (2*b*Q[2]+b*Q[0]),
+                  (7*a*Q[3]+3*a*Q[1]),
+                  (-L*a*Q[3]-L*L*Q[1]/30)])
+
+#_Versao 3D Dinamica
+def CT3DD(Q,L,r,A):
+    a = L*0.05
+    b = L/6
+    # peso_proprio = array([0,-0.5,0,0,0,-0.5*b,0,-0.5,0,0,0,+0.5*b])*(r*A*L)
+    return array([ (2*b*Q[0]+b*Q[3]),
+                  (7*a*Q[1]+3*a*Q[4]),
+                  (7*a*Q[2]+3*a*Q[5]),
+                  (0),
+                  (L*a*Q[2]+L*L*Q[5]/30),
+                  (L*a*Q[1]+L*L*Q[4]/30),
+                  (2*b*Q[3]+b*Q[0]),
+                  (7*a*Q[4]+3*a*Q[1]),
+                  (7*a*Q[5]+3*a*Q[2]),
+                  (0),
+                  (-L*a*Q[5]-L*L*Q[2]/30),
+                  (-L*a*Q[4]-L*L*Q[1]/30)])
+
+
+#_Especiais_#
+
+#_Amortecimento Rayleigh
+def AD(A,B,a,b):
+	return (A*a + B*b)
+
+#_Matriz Dinamica Newmark
+def T(M,C,K,bi,ti,g):
+	return (M*bi*ti*ti + C*g*ti*bi + K)
+
+
+        # Alocacoes e Retiradas
+
+#_Alocacoes_#
+
+#_Basicas
+
+def LoopAlocF(A1,A2,Ni,A,GL):
+    A1[(GL*Ni):(GL*Ni+GL)] += A2[(A):(A+GL)]
+    return 0
+
+def LoopAloc(A1,A2,N1,N2,A,B,GL):
+    A1[(GL*N1):(GL*N1+GL),(GL*N2):(GL*N2+GL)] += A2[A:(A+GL),B:(B+GL)]
+    return 0
+
+def AlocE(A1,A2,i,GL):
+    A1[(GL*i):(GL*(i+1))] += A2
+    return 0
+
+#_Gerais
+
+def AlocF(A1,A2,Ni,Nf,GL):
+    return LoopAlocF(A1,A2,Ni-1,0,GL)+LoopAlocF(A1,A2,Nf-1,GL,GL)
+
+def Aloc(A1,A2,Ni,Nf,GL):
+    return LoopAloc(A1,A2,Ni-1,Ni-1,0,0,GL)+LoopAloc(A1,A2,Ni-1,Nf-1,0,GL,GL)+LoopAloc(A1,A2,Nf-1,Ni-1,GL,0,GL)+LoopAloc(A1,A2,Nf-1,Nf-1,GL,GL,GL)
+
+def AlocE3(A1,A2,A3,B1,B2,B3,i,GL):
+    return AlocE(A1,B1,i,GL)+AlocE(A2,B2,i,GL)+AlocE(A3,B3,i,GL)
+
+def AlocFC(a,b,c):
+	return concatenate(list((b[int(x[c]-1)] for x in a)))
+
+#_Retiradas_#
+
+def RetirED(A1,a,GLN):
+    return A1[(a*GLN):((a+1)*GLN)]
+
+def RetirEE(D,Ni,Nf,GL):
+    a1 = zeros([2*GL])
+    AlocE(a1,RetirED(D,Ni-1,GL),0,GL)+AlocE(a1,RetirED(D,Nf-1,GL),1,GL)
+    return a1
+
+def Retir(A1,A2,A3,a,GLN):
+    return [RetirED(A1,a,GLN), RetirED(A2,a,GLN), RetirED(A3,a,GLN)]
+
+        # Estruturas Gerais Atulizadas
+
+#_K_#
+
+def Kg2D(A1,ME,P,v,i,GL):
+	return Aloc(A1,(RM(R2D(v),K2D(P[1],P[2],P[0],v[2]))), ME[i][0], ME[i][1],GL)
+
+def Kg3D(A1,ME,P,v,i,GL):
+    return Aloc(A1,(RM(R3D(v),K3D(P[2],P[3],P[4],P[5],P[0],P[1],v[3]))), ME[i][0], ME[i][1],GL)
+
+#_M_#
+
+def Mg2D(A1,ME,P,v,i,GL):
+	return Aloc(A1,(RM(R2D(v),M2D(P[1],v[2],P[4]))), ME[i][0], ME[i][1],GL)
+
+def Mg3D(A1,ME,P,v,i,GL):
+	return Aloc(A1,(RM(R3D(v),M3D(P[2],P[3],v[3],P[7]))), ME[i][0], ME[i][1],GL)
+
+#_F_#
+
+#_Versao 2D Estatica
+def Fg2D(F1,ME,P,v,i,GL):
+	return AlocF(F1,CT2D(P[3],v[2]),ME[i][0],ME[i][1],GL)
+
+#_Versao 3D Estatica
+def Fg3D(F1,ME,P,v,i,GL):
+    return AlocF(F1,CT3D(P[6],v[3]),ME[i][0],ME[i][1],GL)
+
+#_Versao 2D Dinamica
+def Fg2DD(F1,ME,P,v,i,GL):
+	return AlocF(F1,CT2DD(P[3],v[2],P[4],P[1]),ME[i][0],ME[i][1],GL)
+
+#_Versao 3D Dinamica
+def Fg3DD(F1,ME,P,v,i,GL):
+    return AlocF(F1,CT3DD(P[6],v[3],P[7],P[2]),ME[i][0],ME[i][1],GL)
+
+#_Combinacoes_#
+
+#_Versao 2D Estatico
+def CE2D(A1,F1,MN,ME,Easm,GL,M,G,C,i):
+    v = DIR2D(DN(MN,ME,i,0),DN(MN,ME,i,1))
+    E = array([M[Easm[i][0]-1][0],G[Easm[i][1]-1][0],G[Easm[i][1]-1][1],C[Easm[i][2]-1]],dtype = list)
+    return Kg2D(A1,ME,E,v,i,GL) + Fg2D(F1,ME,E,v,i,GL)
+
+#_Versao 3D Estatico
+def CE3D(A1,F1,MN,ME,Easm,GL,M,G,C,i):
+    v = DIR3D(DN(MN,ME,i,0),DN(MN,ME,i,1),DN(MN,ME,i,2))
+    E = array([M[Easm[i][0]-1][0],M[Easm[i][0]-1][1],G[Easm[i][1]-1][0],G[Easm[i][1]-1][1],G[Easm[i][1]-1][2],G[Easm[i][1]-1][3],C[Easm[i][2]-1]],dtype = list)
+    return Kg3D(A1,ME,E,v,i,GL) + Fg3D(F1,ME,E,v,i,GL)
+
+#_Versao 2D Dinamico
+def CD2D(A1,A2,F1,MN,ME,Easm,GL,M,G,C,D,i):
+    v = DIR2D(DN(MN,ME,i,0),DN(MN,ME,i,1))
+    E = array([M[Easm[i][0]-1][0],G[Easm[i][1]-1][0],G[Easm[i][1]-1][1],C[Easm[i][2]-1],D[Easm[i][3]-1][0]],dtype = list)
+    return Kg2D(A1,ME,E,v,i,GL) + Mg2D(A2,ME,E,v,i,GL) + Fg2DD(F1,ME,E,v,i,GL)
+
+#_Versao 3D Dinamico
+def CD3D(A1,A2,F1,MN,ME,Easm,GL,M,G,C,D,i):
+    v = DIR3D(DN(MN,ME,i,0),DN(MN,ME,i,1),DN(MN,ME,i,2))
+    E = array([M[Easm[i][0]-1][0],M[Easm[i][0]-1][1],G[Easm[i][1]-1][0],G[Easm[i][1]-1][1],G[Easm[i][1]-1][2],G[Easm[i][1]-1][3],C[Easm[i][2]-1],D[Easm[i][3]-1][0]],dtype=list)
+    return Kg3D(A1,ME,E,v,i,GL) + Mg3D(A2,ME,E,v,i,GL) + Fg3DD(F1,ME,E,v,i,GL)
+
+        # Repetidores Estruturais
+
+#_Versao em 2D Estatico_#
+
+def EstrE2D(A1,F1,MN,ME,Easm,GL,M,G,C):
+    return sum((CE2D(A1,F1,MN,ME,Easm,GL,M,G,C,i) for i in range(Size(ME,axis=0))))
+
+def ECE2D(A1,D,MN,ME,Easm,GL,M,G,C):
+    for i in range(0,Size(ME,axis=0)):
+        v = DIR2D(DN(MN,ME,i,0), DN(MN,ME,i,1))
+        AlocE(A1,(EM(K2D(G[Easm[i][1]-1][0],G[Easm[i][1]-1][1],M[Easm[i][0]-1][0],v[2]),EM(R2D(v),RetirEE(D,ME[i][0],ME[i][1],GL)))-EM(R2D(v),CT2D(C[Easm[i][2]-1],v[2]))),i,GL*2)
+    return 0
+
+#_Versao em 3D Estatico_#
+
+def EstrE3D(A1,F1,MN,ME,Easm,GL,M,G,C):
+    return sum((CE3D(A1,F1,MN,ME,Easm,GL,M,G,C,i) for i in range(Size(ME,axis=0))))
+
+def ECE3D(A1,D,MN,ME,Easm,GL,M,G,C):
+    for i in range(0,Size(ME,axis=0)):
+        v = DIR3D(DN(MN,ME,i,0),DN(MN,ME,i,1),DN(MN,ME,i,2))
+        AlocE(A1,(EM(K3D(G[Easm[i][1]-1][0],G[Easm[i][1]-1][1],G[Easm[i][1]-1][2],G[Easm[i][1]-1][3],M[Easm[i][0]-1][0],M[Easm[i][0]-1][1],v[3]),EM(R3D(v),RetirEE(D,ME[i][0],ME[i][1],GL)))-EM(R3D(v),CT3D(C[Easm[i][2]-1],v[3]))),i,GL*2)
+    return 0
+
+#_Versao em 2D Dinamico_#
+
+def EstrD2D(A1,A2,F1,MN,ME,Easm,GL,M,G,C,D):
+    return sum((CD2D(A1,A2,F1,MN,ME,Easm,GL,M,G,C,D,i) for i in range(Size(ME,axis=0))))
+
+def EED2D2(Desloc,Veloc,Acel,MN,ME,Easm,M,G,D,C,a,b,n,GL):
+    a1 = zeros([2*n*GL])
+    for i in range(n):
+        v = DIR2D(DN(MN,ME,i,0), DN(MN,ME,i,1))
+        r,k,m = R2D(v),K2D(G[Easm[i][1]-1][0],G[Easm[i][1]-1][1],M[Easm[i][0]-1][0],v[2]),M2D(G[Easm[i][1]-1][0],v[2],D[Easm[i][3]-1][0])
+        c = AD(m,k,a,b)
+        AlocE(a1,(EM(k, EM(r, RetirEE(Desloc, ME[i][0], ME[i][1], GL))) - (EM(c, EM(r, RetirEE(Veloc, ME[i][0], ME[i][1], GL))) + EM(m, EM(r, RetirEE(Acel, ME[i][0], ME[i][1], GL))) + EM(r, CT2D(C[Easm[i][2]-1],v[2])))),i,GL*2)
+    return a1
+
+#_Versao em 3D Dinamico_#
+
+def EstrD3D(A1,A2,F1,MN,ME,Easm,GL,M,G,C,D):
+    return sum((CD3D(A1,A2,F1,MN,ME,Easm,GL,M,G,C,D,i) for i in range(Size(ME,axis=0))))
+
+def EED3D2(Desloc,Veloc,Acel,MN,ME,Easm,M,G,D,C,a,b,n,GL):
+    a1 = zeros([2*n*GL])
+    for i in range(n):
+        v = DIR3D(DN(MN,ME,i,0), DN(MN,ME,i,1),DN(MN,ME,i,2))
+        r,k,m = R3D(v),K3D(G[Easm[i][1]-1][0],G[Easm[i][1]-1][1],G[Easm[i][1]-1][2],G[Easm[i][1]-1][3],M[Easm[i][0]-1][0],M[Easm[i][0]-1][1],v[3]),M3D(G[Easm[i][1]-1][0],G[Easm[i][1]-1][1],v[3],D[Easm[i][3]-1][0])
+        c = AD(m,k,a,b)
+        AlocE(a1,(EM(k, EM(r, RetirEE(Desloc, ME[i][0], ME[i][1], GL))) - (EM(c, EM(r, RetirEE(Veloc, ME[i][0], ME[i][1], GL))) + EM(m, EM(r, RetirEE(Acel, ME[i][0], ME[i][1], GL))) + EM(r, CT3D(C[Easm[i][2]-1],v[3])))),i,GL*2)
+    return a1
+
+        # Resolvedor
+
+def DesE(A, F, MCC, N, GL):
+    return ((inv(RM(CC(MCC, N, 1, GL), A)+CC(MCC, N, 0, GL))-CC(MCC, N, 0, GL))@ F)
+
+def ReaE(K, N, MCC, D, F, GL):
+    return (RV(CC(MCC, N, 0, GL), ((K@D)-F)))
+
+def ReaD(M,C,K,N,MCC,D,V,A,F,GL):
+    return (RV(CC(MCC,N,0,GL),((K@D)-(C@V)-(M@A)-F)))
+
+        # Repetidor Temporal
+
+#_Esforcos Versao 2D Dinamico_#
+
+def EED2D(dh,vh,ah,MN,ME,Easm,M,G,D,C,Rep,GL,a,b):
+    n1 = Size(ME,axis=0)
+    a1 = zeros([2*n1*GL*(Rep+1)])
+    for t in range(Rep+1):
+        AlocE(a1,EED2D2(RetirED(dh,t,GL*N),RetirED(vh,t,GL*N),RetirED(ah,t,GL*N),MN,ME,Easm,M,G,D,C,a,b,n1,GL),t,2*GL*n1)
+    return a1
+
+#_Esforcos Versao 3D Dinamico_#
+
+def EED3D(dh,vh,ah,MN,ME,Easm,M,G,D,C,Rep,GL,a,b):
+    n1 = Size(ME,axis=0)
+    a1 = zeros([2*n1*GL*(Rep+1)])
+    for t in range(Rep+1):
+        AlocE(a1,EED3D2(RetirED(dh,t,GL*N),RetirED(vh,t,GL*N),RetirED(ah,t,GL*N),MN,ME,Easm,M,G,D,C,a,b,n1,GL),t,2*GL*n1)
+    return a1
+
+#_Gerais_#
+
+
+#_Forcas de Pulso_# Quando for utilizar descomentar, se haver duvidas sobre como funciona, ler o README.
+
+# def Lin(ti,to,F,t):
+#     a1 = ((to-ti)/2) + ti
+#     return ((t>=ti)*(t<=a1)*(t-ti)+(t<=to)*(t>a1)*(to-t))*(2/(to-ti))*F
+
+# def ForcConImp(N,t,GL):
+#     f = zeros([N*GL])
+#     F = array([50,0,0,0,0,0])
+#     AlocE(f,Lin(0,0.04,F,t),0,GL)
+#     return f
+
+#_Forcas Senoidais_#
+
+def CalcSen(v,t,GL):
+    return v[:GL]*sin(v[-2]*t+v[-1])
+
+def TSen(tfcd,t,GL):
+    return [CalcSen(v, t, GL) for v in tfcd]
+
+def ForcConDin(GL,N,Casm,tfcd,t):
+    f, v = zeros([N*GL]), TSen(tfcd,t,GL)
+    sum(AlocE(f,v[Casm[i][2] - 1],i,GL) for i in range(Size(Casm,axis=0)))
+    return f
+
+#_Newmark_#
+
+def S(M, C, q, r, g, t):
+	return -((M @ q) + (C @ (q*g*t + r)))
+
+def NM(M, C, MTi, MCC, F, v, b, g, bi, t, ti, GL):
+    q = -(v[0]*bi*ti*ti + v[1]*bi*ti + v[2]*(0.5*bi - 1))
+    r = (v[1] + v[2]*t*(1-g))
+    d = EM(MTi, (F + S(M, C, q, r, g, t)))
+    a = (d*bi*ti*ti + q)
+    v = (a*g*t + r)
+    return d, v, a
+
+#_DVA_#
+
+def TED(C, M, MTi, MCC, ah, vh, dh, b, g, Casm, tfcd, Rep, dT, N, F, GL):
+    bi, dTi, dim = (1/b), (1/dT), (GL*N)
+    a1, a2, a3 = zeros([Rep*GL*N]), zeros([Rep*GL*N]), zeros([Rep*GL*N])
+    
+    f = F + ForcConDin(GL,N,Casm,tfcd,0) #+ ForcConImp(N,0,GL) Quando for utilizar forca de impulso descomentar
+    a4, a5, a6 = NM(M, C, MTi, MCC, f, (Retir(dh, vh, ah, 0, (GL*N))), b, g, bi, dT, dTi, GL)
+    AlocE3(a1,a2,a3,a4,a5,a6,0,dim)
+    for t in range(Rep-1):
+        f = F + ForcConDin(GL,N,Casm,tfcd,(t+1)*dT) #+ ForcConImp(N,(t+1)*dT,GL) Quando for utilizar forca de impulso descomentar
+        a4, a5, a6 = NM(M, C, MTi, MCC, f, (Retir(a1, a2, a3, t, (GL*N))), b, g, bi, dT, dTi, GL)
+        AlocE3(a1,a2,a3,a4,a5,a6,t+1,dim)
+    return a1, a2, a3
+
+#_Reacoes Dinamicas_#
+
+def TReaD(M,C,K,N,MCC,F,dh,vh,ah,Rep,GL):
+    a1 = zeros([(Rep+1)*GL*N])
+    for t in range(0,Rep+1):
+        AlocE(a1,ReaD(M,C,K,N,MCC,RetirED(dh,t,GL*N),RetirED(vh,t,GL*N),RetirED(ah,t,GL*N),F,GL),t,(GL*N))
+    return a1
+
+#_Autovalores e Autovetores_#
+
+def Eigvv(K,M,MCC):
+    a1 = inv(RM(CC(MCC,N,1,GL),M)+CC(MCC,N,0,GL))-CC(MCC,N,0,GL)
+    a2 = RM(CC(MCC,N,1,GL),K)
+    Val,Vec = eig(a1@a2)
+    return Vec,Raiz(Val)
+
+def OrdEig(n,K,M,MCC,GL):
+    V,F = Eigvv(K, M, MCC)
+    a0 = (sum(map(lambda x: x==0,F.real)))
+    if (n>((Size(K,axis=0)))):
+        n = int(Size(K,axis=0) - a0)
+    a1,a2 = zeros([2+Size(F),n]),sorted(range(Size(F)),key = lambda x: F[x].real,reverse = False)
+    for i in range(n):
+        a1[0,i] += i+1
+        a1[1,i] += F[a2[i+a0]].real
+        a1[2:,i] += V[:,a2[i+a0]].real
+    return a1.T
+
+#_________Leitor____________#
+
+def A2(a,i):
+    a1 = int(a[i][0])
+    a2 = []
+    for j in range(0,a1):
+        a2.append(a[i+1+j])
+    return a2
+
+def A1(a,j,i):
+    ab = []
+    for z in range(0,j):
+        ab.append(A2(a,i))
+        i += int(a[i][0])+1
+    return ab
+
+def CON(a,j,i):
+    for z in range(0,j):
+        i += int(a[i][0])+1
+    return i
+
+def SEP(a,s,e):
+    a1 = []
+    a2 = []
+    for i in range(0,int(Size(a)/(s+e))):
+        a1.append(a[0][i][0:s])
+        a2.append(a[0][i][s:s+e])
+    return [a1,a2]
+
+
+def Leitor(BBB):
+    with open((BBB+".txt"),"r") as A:
+        a = [list(map(lambda x: float(x),i)) for i in list(map(lambda x: x[0].strip().split(','),[i for i in (list(map(lambda x: x.strip().split(' ',),A.readlines()))) if (i != [''])]))]
+        reg, dim = bool(int(a[0][0])), bool(int(a[0][1]))
+        tcc, tfc, tpm, tpg, tfd = A1(a,5,1)
+        i = CON(a,5,1)
+        GL = 3 + 3*dim
+        if (reg):
+            dT, Ttot = float(a[i][0]), float(a[i][1])
+            Raya, Rayb = float(a[i+1][0]), float(a[i+1][1])
+            tpd, tfcd, desli, veli, aceli = A1(a,5,(i+2))
+            i = CON(a,5,i+2)
+            Coord, Coord_asm = SEP(A1(a,1,i),(2+dim),6)
+            i = CON(a,1,i)
+            Elem, Elem_asm = SEP(A1(a,1,i),2,4)
+            Coord_asm = [list(map(int,i)) for i in Coord_asm]
+            Elem = [list(map(int,i)) for i in Elem]
+            Elem_asm = [list(map(int,i)) for i in Elem_asm]
+            return [dT,Ttot,Raya,Rayb,Coord,Coord_asm,tcc,tfc,desli,veli,aceli,Elem,Elem_asm,tpm,tpg,tfd,tpd,tfcd,GL]
+        else:
+            Coord,Coord_asm = SEP(A1(a,1,i),(2+dim),2)
+            i = CON(a,1,i)
+            Elem,Elem_asm = SEP(A1(a,1,i),2,3)
+            Coord_asm = [list(map(int,i)) for i in Coord_asm]
+            Elem = [list(map(int,i)) for i in Elem]
+            Elem_asm = [list(map(int,i)) for i in Elem_asm]
+            return [Coord,Coord_asm,tcc,tfc,Elem,Elem_asm,tpm,tpg,tfd,GL]
+
+##_______________Saida Plot___________________##
+
+def Plotagem(t,GL,N,D,V,A,Ni,Pos,Rep):
+    a0,a1,a2,a3 = zeros([Rep]),zeros([Rep]),zeros([Rep]),zeros([Rep])
+    for i in range(0,Rep):
+        j = (i*GL*N) + (Ni-1)*GL + (Pos-1)
+        a0[i], a1[i], a2[i], a3[i] = i*t, D[j], V[j], A[j]
+    fig, (ax1,ax2,ax3) = subplots(3,1,sharex=True)
+    ax1.set_ylabel('(m)',fontfamily='sans-serif',fontsize=10)
+    ax2.set_ylabel('(m/s)',fontfamily='sans-serif',fontsize=10)
+    ax3.set_ylabel('(m/s^2)',fontfamily='sans-serif',fontsize=10)
+    ax3.set_xlabel('(s)',fontfamily='sans-serif',fontsize=10)
+    ax1.plot(a0,a1,color='blue',linewidth = 0.75),ax2.plot(a0,a2,color='green',linewidth = 0.50),ax3.plot(a0,a3,color='red',linewidth = 0.50)
+    fig.savefig('Plot.pdf')
+    return 0
+
+def PlotagemD(t,GL,N,D,Ni,Pos,Rep):
+    a0,a1 = zeros([Rep]),zeros([Rep])
+    for i in range(Rep):
+        j = (i*GL*N) + (Ni-1)*GL + (Pos-1)
+        a0[i], a1[i] = i*t, D[j]
+    fig, (ax1) = subplots(1,sharex=True)
+    ax1.plot(a0,a1,color='blue',linewidth = 0.75)
+    ax1.set_ylabel('Displacemnets (m)',fontfamily='sans-serif',fontweight='bold',fontsize=10)
+    ax1.set_xlabel('Time (s)',fontfamily='sans-serif',fontweight='bold',fontsize=10)
+    ax1.set_xticks((list(map(lambda x: x*0.04,list(range(6))))))
+    fig.savefig('PlotD.pdf')
+
+def P1ACAD(F,arquivo):
+	return print("\n%s\n#" %F,file=arquivo)
+
+def P2ACAD(D,N,Rep,GL,arquivo,S):
+    NGL = N*GL
+    for i in range(Rep):
+        a = NGL*i
+        print("#\nLista %d"%(i+1),file=arquivo)
+        for j in range(N):
+            b = j*GL + a
+            print("\t%.4f\t%.4f\t%.4f\t%.4f" %(D[b],D[b+1],D[b+2],D[b+S]),file=arquivo)
+    return 0
+
+def ACAD(D,Coord,Elem,N,Ne,Rep,GL,S):
+    with open('ACAD.txt','w') as a1:
+        print('arquivo de pós-processamento',file=a1)
+        P1ACAD('nnos nelem nlistas',a1)
+        print('\t%d\t\t%d\t\t%d'%(N,Ne,Rep),file=a1)
+        P1ACAD('coordx coordy coordz deslx desly deslz',a1)
+        if (GL==3):
+            for i in range(N):
+                print('   %.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f'%(Coord[i][0],Coord[i][1],0,0,0,0),file=a1)
+        if (GL==6):
+            for i in range(N):
+                print('   %.5f\t%.5f\t%.5f\t%.5f\t%.5f\t%.5f'%(Coord[i][0],Coord[i][1],Coord[i][2],0,0,0),file=a1)
+        P1ACAD('tpelem (1 - barra / 2 - triang / 3 - quad) grauaprox nó1 nó2...non',a1)
+        for i in range(Ne):
+            print('\t1\t\t1\t\t%d\t\t%d'%(Elem[i][0],Elem[i][1]),file=a1)
+        P2ACAD(D,N,Rep,GL,a1,S)
+    return 0
+##____________________________________________##
+BBB = 'Entrada'
+a1 = list(map(array,Leitor(BBB)))
+K1, K2 = (len(a1) == 19), (a1[-1] == 3)
+
+if (K1):
+    gamma = 0.5 # Fator da integracao de Newmark
+    beta = 0.25 # Fator da integracao de Newmark
+
+    dT,Ttot,Raya,Rayb,Coord,Coord_asm,tcc,tfc,desli,veli,aceli,Elem,Elem_asm,tpm,tpg,tfd,tpd,tfcd,GL = a1
+    del(a1)
+
+    Rep = int((Ttot//dT)+bool(Ttot%dT))
+
+    N = int(Size(Coord,axis=0))
+
+    ForcasC = zeros([0])
+    CondC = zeros([0])
+    Desloc = zeros([0])
+    Veloc = zeros([0])
+    Acel = zeros([0])
+    
+    CondC = AlocFC(Coord_asm,tcc,0)
+    ForcasC = AlocFC(Coord_asm,tfc,1)
+    Desloc = AlocFC(Coord_asm, desli, 3)
+    Veloc = AlocFC(Coord_asm, veli, 4)
+    Acel = AlocFC(Coord_asm, aceli, 5)
+
+    Kglobal = zeros([GL*N,GL*N])
+    Mglobal = zeros([GL*N,GL*N])
+    ForcasD = zeros([GL*N])
+
+    if (K2):
+        EstrD2D(Kglobal, Mglobal, ForcasD, Coord, Elem, Elem_asm, GL, tpm, tpg, tfd, tpd)
+    else:
+        EstrD3D(Kglobal, Mglobal, ForcasD, Coord, Elem, Elem_asm, GL, tpm, tpg, tfd, tpd)
+    
+    Modos = OrdEig(999,Kglobal,Mglobal,CondC,GL)
+
+    Cglobal = AD(Mglobal, Kglobal, Raya, Rayb)
+    Tglobalinv = (inv(RM(CC(CondC, N, 1, GL), T(Mglobal, Cglobal, Kglobal, (1/beta), (1/dT), gamma)) + CC(CondC,N,0,GL)) - CC(CondC,N,0,GL))
+    a1,a2,a3 = TED(RM(CC(CondC, N, 1, GL), Cglobal), RM(CC(CondC, N, 1, GL), Mglobal), Tglobalinv, CondC, Acel, Veloc, Desloc, beta, gamma, Coord_asm, tfcd, Rep, dT, N, (ForcasD+ForcasC), GL)
+    DeslocT, VelocT, AcelT = append(Desloc, a1), append(Veloc, a2), append(Acel, a3)
+    del(a1, a2, a3, Desloc, Acel, Veloc)
+    Reacoes = TReaD(Mglobal, Cglobal, Kglobal, N, CondC, (ForcasC+ForcasD), DeslocT, VelocT, AcelT, Rep, GL)
+
+    if (K2):
+        Esforcos = EED2D(DeslocT, VelocT, AcelT, Coord, Elem, Elem_asm, tpm, tpg, tpd, tfd, Rep, GL, Raya, Rayb)
+    else:
+        Esforcos = EED3D(DeslocT, VelocT, AcelT, Coord, Elem, Elem_asm, tpm, tpg, tpd, tfd, Rep, GL, Raya, Rayb)
+    
+    # Quando for utilizar descomentar, se haver duvidas sobre como funciona, ler o README.
+    
+    # Plotagem(dT, GL, N, DeslocT, VelocT, AcelT, 10, 1, Rep)
+    # PlotagemD(dT, GL, N, DeslocT, 1, 1, Rep)
+    # ACAD(DeslocT,Coord,Elem,N,Size(Elem,axis=0),Rep,GL,1)
+    del(Ttot,Coord,Coord_asm,tfcd,tcc,tfc,desli,veli,aceli,Elem,Elem_asm,tpm,tpg,tfd,tpd,Kglobal,Cglobal,Mglobal,Tglobalinv,ForcasD,ForcasC,CondC,Raya,Rayb,gamma,beta,K1,K2,N)
+
+else:
+    Coord,Coord_asm,tcc,tfc,Elem,Elem_asm,tpm,tpg,tfd,GL = a1
+    del(a1)
+    
+    N = Size(Coord,axis=0)
+
+    ForcasC = zeros([0])
+    CondC = zeros([0])
+    CondC = AlocFC(Coord_asm,tcc,0)
+    ForcasC = AlocFC(Coord_asm,tfc,1)
+    
+    Kglobal = zeros([GL*N,GL*N])
+    ForcasD = zeros([GL*N])
+    Esforcos = zeros([2*GL*Size(Elem,axis=0)])
+    
+    if (K2):
+        EstrE2D(Kglobal, ForcasD, Coord, Elem, Elem_asm, GL, tpm, tpg, tfd)
+    else:
+        EstrE3D(Kglobal, ForcasD, Coord, Elem, Elem_asm, GL, tpm, tpg, tfd)
+    
+    Desloc = DesE(Kglobal, (ForcasD+ForcasC), CondC, N, GL)
+    Reacoes = ReaE(Kglobal, N, CondC, Desloc, (ForcasC+ForcasD), GL)
+    
+    if(K2):
+        ECE2D(Esforcos, Desloc, Coord, Elem, Elem_asm, GL, tpm, tpg, tfd)
+    else:
+        ECE3D(Esforcos, Desloc, Coord, Elem, Elem_asm, GL, tpm, tpg, tfd)
+    
+    del(Coord,Coord_asm,tcc,tfc,Elem,Elem_asm,tpm,tpg,tfd,GL,Kglobal,ForcasD,ForcasC,CondC,N,K1,K2)
